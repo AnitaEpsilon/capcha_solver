@@ -1,57 +1,70 @@
-capcha_solver
-==============================
+# Intro
+Проект представляет собой решение задачи распознавания и классификации изображений с использованием нейросетевых моделей. Целью проекта является разработка модели, способной эффективно решать капчи, состоящие из группы изображений с иконками, расположенными на орбитах. Основной задачей модели является выбор правильного изображения в соответствии с зашифрованным ответом на картинке-подсказке. Итоговая оценка производительности модели основывается на метрике Accuracy, лучший полученный резултат - 0.84. Для определения схожести картинки из задания с картинкой на орбите использовалась модель на основе CLIP, в zero-shot режиме (без доп. линейного слоя) она выдавала ROC-AUC 0.6841, после обучения линейного слоя - 0.9997.
 
-Test task for solving CAPTCHA by selecting the correct image number according to the image instructions
-
-Project Organization
-------------
-
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
+# Структура проекта
+    ├── README.md          <- Главный файл README для разработчиков, использующих этот проект.
+    ├── main.ipynb         <- Весь пайплайн инференса от предобработки данных до оценки метрик и визуализации
+    ├── visualize_errors.ipynb<- Просмотр разметки из исходных json и предсказаний модели
+    │
     ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
+    │   ├── raw            <- Исходный, неизменяемый дамп данных.
+    │   ├── interim        <- Промежуточные данные, которые были трансформированы.
+    │   └── benchmarked    <- Данные, на которых проводился файн-тюнинг
     │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
+    ├── notebooks          <- Jupyter ноутбуки с экспериментами (все кроме CLIP_finetuning - черновики)
     │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
+    ├── src
+    │   ├── data
+    │   │   ├── crop_squares.py          <- Вырезает квадраты из изображения по заданным координатам.
+    │   │   ├── data_for_finetuning.py   <- Создаёт датасет с правильными ответами для модели сравнения изображений
+    │   │   ├── prepare_dataset.py       <- Подготавливает датасет для обучения.
+    │   │   ├── preprocess_labels.py     <- Обрабатывает метки данных.
+    │   │   └── preprocessing.py         <- Предварительная обработка данных.
     │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
+    │   ├── models
+    │   │   ├── clip_finetune.py         <- Добавляет линейный слой к предобученной модели CLIP.
+    │   │   └── evaluation.py            <- Оценивает точность модели.
     │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
+    │   ├── train.py                     <- Скрипт для обучения моделей (в работе, см. notebooks/CLIP_finetuning)
     │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
+    │   └── visualization
+    │       └── visualize.py             <- Скрипты для создания визуализаций.
+    └──  models               <- Веса обученных моделей
+
+# Процесс работы модели
+Процесс оценки происходит так:
+Из json-файлов извлекаются лейблы цифр (1-5) и координаты искомого объекта (в разметке он обозначен знаком "+") на каждой из 5 солнечных систем. Далее, вычисляется, какой из этих объектов расположен на нужной орбите в своей системе (непосредственно из размеченных данных это иззвлечь нельзя, поэтому рассчеты расстояния произодятся относительно фиксированного центра системы планет). Наконец, патч, соответствующий правильной орбите, смещается вправо на 200*(n-1) пикселей (где n - номер правильной системы при отсчёте начиная с 1). Ответ считается правильным, если предсказанная точка попадает в патч после смещения. Для оценки модели используется метрика Accuracy, равная отношению правильных ответов к размеру выборки.
+
+Можно наглядно его посмотреть в ноутбуке: main.ipynb
+
+## Основные оставшиеся проблемы:
+Не всегда детектируются цифры "1" и "4"
+
+Если рядом много планет, могут задетектироваться не все
+
+Модель плохо различает похожие объекты, если они отличаются только мелкими деталями
+
+В некоторых примерах имеется ошибка в разметке (в том числе в тестовой выборке, см. visualize_errors.ipynb, исходная задача 186414)
+
+Ошибки, которые совершает моя модель на отложенных данных можно посмотреть в ноутбуке: visualize_errors.ipynb
+
+# Модели
+Для сравнения картинок использовался энкодер модели CLIP + надстройка над ним в виде одного линейного слоя 512, 64 (см. src/models/clip_finetune). В качестве данных для обучения брались пары: картинка из задания (чёрно-белая) + картинка из орбиты, вырезанная с помощью скриптов в src/data/crop_squares и ответ - одинаковые они или нет, определяемый по данным из соответствующего json файла. Всего таким образом было получено около 5 тыс объектов, для тестирования были использованы только данные из отложенной выборки (10%). До добавления линейного слоя ROC = 0.6841, после обучения линейного слоя - 0.9997. Процесс дообучения можно посмотреть в ноутбуке notebooks/CLIP_finetuning. 
+На всём протяжении обучения тщательно отслеживалось то, что тестовые данные не компрометируются.
+
+## CLIP
+CLIP ViT-B/32 - это мультимодальная модель, обученная предсказывать соответствие между изображениями и текстом. Для кодирования изображений в ней используется Vision Transformer (ViT), разбивая каждое изображение на фиксированные не перекрывающиеся патчи размером 224x224 пикселя, которые затем кодируются в последовательность векторов. В контексте использования только для изображений, модель производит на выходе вектор размером 512 токенов, представляющий визуальные особенности изображения, без использования текстового энкодера. Была выбрана эта модель, поскольку энкодер в ней близок к Sota, при этом кодирование осущетсвляется в пространство признаков, общее с языковым, что кажется хорошей идеей для кодирования пиктограмм, как в задании.
 
 
---------
 
-<p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+# ToDo
+1. Добавить проверку на необходимость пересоздания промежуточных данных.
+2. Переместить data/benchmarked в data/interim и переименовать.
+3. Удалить make_dataset.py.
+4. Исправить название finetune_model и убрать путаницу между model и finetune_model.
+5. Перенести процесс дообучения в скрипты для упрощения работы.
+6. Объединить процесс генерации датасета в более интуитивный пайплайн.
+7. Сделать более прямолинейным процесс выделения тестовых данных.
+8. Проверить корректность работы на чистой машине.
+9. Добавить управляющие скрипты с CLI и Makefile для упрощения запуска проекта.
+10. Добавить автоматическое определение центра системы планет для повышения точности детекции.
